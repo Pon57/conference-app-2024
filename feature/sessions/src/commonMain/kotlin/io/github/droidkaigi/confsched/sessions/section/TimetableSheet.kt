@@ -1,5 +1,6 @@
 package io.github.droidkaigi.confsched.sessions.section
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -10,9 +11,13 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PageSize
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,6 +36,7 @@ import io.github.droidkaigi.confsched.model.DroidKaigi2024Day
 import io.github.droidkaigi.confsched.model.TimeLine
 import io.github.droidkaigi.confsched.model.TimetableItem
 import io.github.droidkaigi.confsched.sessions.component.TimetableDayTab
+import io.github.droidkaigi.confsched.sessions.component.rememberTimetableNestedScrollConnection
 import io.github.droidkaigi.confsched.sessions.component.rememberTimetableNestedScrollStateHolder
 import io.github.droidkaigi.confsched.sessions.section.TimetableUiState.Empty
 import io.github.droidkaigi.confsched.sessions.section.TimetableUiState.GridTimetable
@@ -50,6 +56,7 @@ sealed interface TimetableUiState {
     ) : TimetableUiState
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun Timetable(
     uiState: TimetableUiState,
@@ -103,28 +110,50 @@ fun Timetable(
             when (uiState) {
                 is ListTimetable -> {
                     val scrollStates = rememberListTimetableScrollStates()
-                    TimetableList(
-                        nestedScrollStateHolder = nestedScrollStateHolder,
-                        uiState = requireNotNull(uiState.timetableListUiStates[selectedDay]),
-                        scrollState = scrollStates.getValue(selectedDay),
-                        onTimetableItemClick = onTimetableItemClick,
-                        onBookmarkClick = onFavoriteClick,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .weight(1f),
-                        contentPadding = PaddingValues(
-                            bottom = contentPadding.calculateBottomPadding(),
-                            start = contentPadding.calculateStartPadding(layoutDirection),
-                            end = contentPadding.calculateEndPadding(layoutDirection),
-                        ),
-                        scrolledToCurrentTimeState = scrolledToCurrentTimeState,
-                        enableAutoScrolling = clock.now() in selectedDay.start..selectedDay.end,
-                        timetableItemTagsContent = { timetableItem ->
-                            timetableItem.language.labels.forEach { label ->
-                                TimetableItemTag(tagText = label)
-                            }
-                        },
+                    val pagerState = rememberPagerState(
+                        initialPage = selectedDay.tabIndex(),
+                        pageCount = { DroidKaigi2024Day.visibleDays().size }
                     )
+                    LaunchedEffect(selectedDay) {
+                        pagerState.animateScrollToPage(selectedDay.tabIndex())
+                    }
+                    LaunchedEffect(pagerState.targetPage) {
+                        selectedDay = DroidKaigi2024Day.visibleDays()[pagerState.targetPage]
+                    }
+
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier
+                            .offset {
+                                IntOffset(
+                                    x = 0,
+                                    y = nestedScrollStateHolder.uiState.dayTabOffsetY.toInt()
+                                )
+                            }
+                    ) { page ->
+                        TimetableList(
+                            nestedScrollStateHolder = nestedScrollStateHolder,
+                            uiState = requireNotNull(uiState.timetableListUiStates[DroidKaigi2024Day.visibleDays()[page]]),
+                            scrollState = scrollStates.getValue(DroidKaigi2024Day.visibleDays()[page]),
+                            onTimetableItemClick = onTimetableItemClick,
+                            onBookmarkClick = onFavoriteClick,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .weight(1f),
+                            contentPadding = PaddingValues(
+                                bottom = contentPadding.calculateBottomPadding(),
+                                start = contentPadding.calculateStartPadding(layoutDirection),
+                                end = contentPadding.calculateEndPadding(layoutDirection),
+                            ),
+                            scrolledToCurrentTimeState = scrolledToCurrentTimeState,
+                            enableAutoScrolling = clock.now() in DroidKaigi2024Day.visibleDays()[page].start..DroidKaigi2024Day.visibleDays()[page].end,
+                            timetableItemTagsContent = { timetableItem ->
+                                timetableItem.language.labels.forEach { label ->
+                                    TimetableItemTag(tagText = label)
+                                }
+                            },
+                        )
+                    }
                 }
 
                 is GridTimetable -> {
